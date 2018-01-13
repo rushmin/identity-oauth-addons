@@ -20,7 +20,6 @@ package org.wso2.carbon.identity.oauth2.token.handler.clientauth.jwt.validator;
 
 import com.nimbusds.jwt.SignedJWT;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang.StringUtils;
 import org.mockito.Mockito;
 import org.powermock.reflect.internal.WhiteboxImpl;
 import org.testng.annotations.BeforeClass;
@@ -250,7 +249,7 @@ public class JWTValidatorTest {
         String hsSignedJWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" +
                 ".eyJzdWIiOiJLclZMb3Y0QmwzbmF0VWtzRjJIbVdzZHc2ODRhIiwibmFtZSI6IkpvaG4gRG9lIiwiaXNzdWVyIjoiS3JWTG92NEJsM25hdFVrc0YySG1Xc2R3Njg0YSIsImp0aSI6MTAwOCwiZXhwIjoiMjU1NDQ0MDEzMjAwMCIsImF1ZCI6WyJzb21lLWF1ZGllbmNlIl19.m0RrVUrZHr1M7R4I_4dzpoWD8jNA2fKkOadEsFg9Wj4";
         SignedJWT signedJWT = SignedJWT.parse(hsSignedJWT);
-        assertFalse(jwtValidator.validateSignature(signedJWT, cert), "Validation should fail when token is null");
+        assertFalse(jwtValidator.isValidSignature(signedJWT, cert), "Validation should fail when token is null");
     }
 
     @Test(dependsOnMethods = "testValidateToken")
@@ -261,7 +260,7 @@ public class JWTValidatorTest {
         WhiteboxImpl.setInternalState(KeyStoreManager.class, "mtKeyStoreManagers", mtKeyStoreManagers);
         Mockito.when(keyStoreManager.getPrimaryKeyStore()).thenReturn(serverKeyStore);
         JWTValidator jwtValidator = getJWTValidator(new Properties());
-        assertNotNull(jwtValidator.getCertificate(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1));
+        assertNotNull(jwtValidator.getCertificateFromKeyStore(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1));
     }
 
     @Test(dependsOnMethods = "testValidateToken")
@@ -272,19 +271,19 @@ public class JWTValidatorTest {
         WhiteboxImpl.setInternalState(KeyStoreManager.class, "mtKeyStoreManagers", mtKeyStoreManagers);
         Mockito.when(keyStoreManager.getPrimaryKeyStore()).thenReturn(clientKeyStore);
         JWTValidator jwtValidator = getJWTValidator(new Properties());
-        assertNull(jwtValidator.getCertificate(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1));
+        assertNull(jwtValidator.getCertificateFromKeyStore(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1));
     }
 
     @Test(dependsOnMethods = "testValidateToken", expectedExceptions = IdentityOAuth2Exception.class)
     public void testGetCertificateException() throws Exception {
         JWTValidator jwtValidator = getJWTValidator(new Properties());
-        jwtValidator.getCertificate(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1);
+        jwtValidator.getCertificateFromKeyStore(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1);
     }
 
     @Test(dependsOnMethods = "testValidateToken", expectedExceptions = IdentityOAuth2Exception.class)
     public void testGetCertificateException2() throws Exception {
         JWTValidator jwtValidator = getJWTValidator(new Properties());
-        jwtValidator.getCertificate("some-tenant", TEST_CLIENT_ID_1);
+        jwtValidator.getCertificateFromKeyStore("some-tenant", TEST_CLIENT_ID_1);
     }
 
     @Test(dependsOnMethods = "testValidateToken", expectedExceptions = IdentityOAuth2Exception.class)
@@ -299,7 +298,7 @@ public class JWTValidatorTest {
                 "Exception"));
         Mockito.when(keyStoreManager.getPrimaryKeyStore()).thenReturn(serverKeyStore);
         JWTValidator jwtValidator = getJWTValidator(new Properties());
-        jwtValidator.getCertificate(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1);
+        jwtValidator.getCertificateFromKeyStore(SUPER_TENANT_DOMAIN_NAME, TEST_CLIENT_ID_1);
     }
 
     @Test(dependsOnMethods = "testValidateToken")

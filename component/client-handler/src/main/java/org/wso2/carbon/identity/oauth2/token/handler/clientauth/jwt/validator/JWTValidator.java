@@ -52,6 +52,7 @@ import org.wso2.carbon.idp.mgt.IdentityProviderManager;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.PublicKey;
+import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
@@ -143,9 +144,20 @@ public class JWTValidator {
         }
 
         String tenantDomain = oAuthAppDO.getUser().getTenantDomain();
+
+        Certificate certificateForSignatureValidation = oAuthAppDO.getCertificate();
+
+        if(certificateForSignatureValidation == null){
+            certificateForSignatureValidation = getCertificateFromKeyStore(tenantDomain, jwtSubject);
+        }
+
         //validate signature
-        if (!isValidSignature(signedJWT, tenantDomain, jwtSubject)) {
-            return logAndReturnFalse("Signature or Message Authentication invalid for:" + jwtSubject);
+        try {
+            if (!isValidSignature(signedJWT, (X509Certificate) certificateForSignatureValidation)) {
+                return logAndReturnFalse("Signature or Message Authentication invalid for:" + jwtSubject);
+            }
+        } catch (JOSEException e) {
+            return handleException("Error when verifying signature with error:" + e.getMessage(), e);
         }
         String validAud = getValidAudience(tenantDomain);
 
@@ -173,25 +185,6 @@ public class JWTValidator {
                     jwtSubject, e);
         }
         return oAuthAppDO;
-    }
-
-    /**
-     * Retrieve the certificate and validate signature
-     *
-     * @param signedJWT
-     * @param tenantDomain
-     * @param alias
-     * @return
-     * @throws IdentityOAuth2Exception
-     */
-    public boolean isValidSignature(SignedJWT signedJWT, String tenantDomain,
-                                    String alias) throws IdentityOAuth2Exception {
-        try {
-            X509Certificate cert = getCertificate(tenantDomain, alias);
-            return validateSignature(signedJWT, cert);
-        } catch (JOSEException e) {
-            return handleException("Error when verifying signature with error:" + e.getMessage(), e);
-        }
     }
 
     /**
@@ -347,7 +340,7 @@ public class JWTValidator {
      * @return X509Certificate object containing the public certificate in the primary keystore of the tenantDOmain
      * with alias
      */
-    public static X509Certificate getCertificate(String tenantDomain, String alias) throws IdentityOAuth2Exception {
+    public static X509Certificate getCertificateFromKeyStore(String tenantDomain, String alias) throws IdentityOAuth2Exception {
 
         int tenantId;
         try {
@@ -401,7 +394,7 @@ public class JWTValidator {
      * @throws com.nimbusds.jose.JOSEException
      * @throws org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception
      */
-    public boolean validateSignature(SignedJWT signedJWT, X509Certificate x509Certificate)
+    public boolean isValidSignature(SignedJWT signedJWT, X509Certificate x509Certificate)
             throws JOSEException, IdentityOAuth2Exception {
 
         JWSVerifier verifier;
