@@ -26,12 +26,23 @@ public class MutualTLSWithIdSecretAuthenticator extends BasicAuthClientAuthentic
 
     private static Log log = LogFactory.getLog(MutualTLSWithIdSecretAuthenticator.class);
 
+    private static final Log TOKEN_LATENCY_LOG = LogFactory.getLog("TOKEN_LATENCY_LOG");
+
     public boolean authenticateClient(HttpServletRequest request, Map<String, List> bodyParams,
                                       OAuthClientAuthnContext oAuthClientAuthnContext)
             throws OAuthClientAuthnException {
 
+        long beforeMutualTLSAuthentication = System.currentTimeMillis();
+
+        long beforeBasicAuthentication = System.currentTimeMillis();
         if (!super.authenticateClient(request, bodyParams, oAuthClientAuthnContext)) {
             return false;
+        }
+        long afterBasicAuthentication = System.currentTimeMillis();
+
+        if(TOKEN_LATENCY_LOG.isDebugEnabled()){
+            TOKEN_LATENCY_LOG.debug(String.format("[MutualTLSWithIdSecretAuthenticator] Basic authentication latency : [%d]",
+                    afterBasicAuthentication - beforeBasicAuthentication));
         }
 
         if (StringUtils.isEmpty(oAuthClientAuthnContext.getClientId())) {
@@ -43,8 +54,19 @@ public class MutualTLSWithIdSecretAuthenticator extends BasicAuthClientAuthentic
             String tenantDomain = OAuth2Util.getTenantDomainOfOauthApp(oAuthClientAuthnContext.getClientId());
             X509Certificate registeredCert = null;
             try {
+
+
+                long beforeGettingRegisteredCert = System.currentTimeMillis();
                 registeredCert = (X509Certificate) OAuth2Util
                         .getX509CertOfOAuthApp(oAuthClientAuthnContext.getClientId(), tenantDomain);
+                long afterGettingRegisteredCert = System.currentTimeMillis();
+
+                if(TOKEN_LATENCY_LOG.isDebugEnabled()){
+                    TOKEN_LATENCY_LOG.debug(String.format("[MutualTLSWithIdSecretAuthenticator] Registered cert retrieval latency : [%d]",
+                            afterGettingRegisteredCert - beforeGettingRegisteredCert));
+                }
+
+
             } catch (IdentityOAuth2Exception e) {
                 if (e.getCause() instanceof CertificateException) {
                     throw e;
@@ -75,7 +97,16 @@ public class MutualTLSWithIdSecretAuthenticator extends BasicAuthClientAuthentic
                 return false;
             }
 
-            return authenticate(registeredCert, requestCert);
+            boolean authenticationResult = authenticate(registeredCert, requestCert);
+
+            long afterMutualTSLAuthentication = System.currentTimeMillis();
+
+            if(TOKEN_LATENCY_LOG.isDebugEnabled()){
+                TOKEN_LATENCY_LOG.debug(String.format("[MutualTLSWithIdSecretAuthenticator] Total authentication latency : [%d]",
+                        afterMutualTSLAuthentication - beforeMutualTLSAuthentication));
+            }
+
+            return authenticationResult;
 
         } catch (IdentityOAuth2Exception e) {
             throw new OAuthClientAuthnException(OAuth2ErrorCodes.SERVER_ERROR, "Error occurred while retrieving " +
@@ -127,9 +158,39 @@ public class MutualTLSWithIdSecretAuthenticator extends BasicAuthClientAuthentic
 
         boolean trustedCert = false;
         try {
+
+            if(log.isDebugEnabled()){
+                log.debug(String.format("Request Cert : Issuer - '%s', SerialNumber - '%s'",registeredCert.getIssuerDN().getName(), registeredCert.getSerialNumber()));
+            }
+
+            long beforeGettingRegisteredCertThumbprint = System.currentTimeMillis();
             String publicKeyOfRegisteredCert = MutualTLSUtil.getThumbPrint(registeredCert);
+            long afterGettingRegisteredCertThumbprint = System.currentTimeMillis();
+
+            if(TOKEN_LATENCY_LOG.isDebugEnabled()){
+                TOKEN_LATENCY_LOG.debug(String.format("[MutualTLSWithIdSecretAuthenticator] Registered cert thumbprint calculation latency : [%d]",
+                        afterGettingRegisteredCertThumbprint - beforeGettingRegisteredCertThumbprint));
+            }
+
+            long beforeGettingRequestCertThumbprint = System.currentTimeMillis();
             String publicKeyOfRequestCert = MutualTLSUtil.getThumbPrint(requestCert);
-            if (StringUtils.equals(publicKeyOfRegisteredCert, publicKeyOfRequestCert)) {
+            long afterGettingRequestCertThumbprint = System.currentTimeMillis();
+
+            if(TOKEN_LATENCY_LOG.isDebugEnabled()){
+                TOKEN_LATENCY_LOG.debug(String.format("[MutualTLSWithIdSecretAuthenticator] Request cert thumbprint calculation latency : [%d]",
+                        afterGettingRequestCertThumbprint - beforeGettingRequestCertThumbprint));
+            }
+
+            long beforeComparingThumbprint = System.currentTimeMillis();
+            boolean doCertificatesMatch = StringUtils.equals(publicKeyOfRegisteredCert, publicKeyOfRequestCert);
+            long afterComparingThumbprint = System.currentTimeMillis();
+
+            if(TOKEN_LATENCY_LOG.isDebugEnabled()){
+                TOKEN_LATENCY_LOG.debug(String.format("[MutualTLSWithIdSecretAuthenticator] Thumbprint comparing latency : [%d]",
+                        afterComparingThumbprint - beforeComparingThumbprint));
+            }
+
+            if (doCertificatesMatch) {
                 if (log.isDebugEnabled()) {
                     log.debug("Client certificate thumbprint matched with the registered certificate thumbprint.");
                 }
